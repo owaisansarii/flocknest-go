@@ -44,7 +44,7 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 	msg := ""
 
 	if err != nil {
-		msg = fmt.Sprintf("login or passowrd is incorrect")
+		msg = "login or passowrd is incorrect"
 		check = false
 	}
 
@@ -73,14 +73,14 @@ func SignUp() gin.HandlerFunc {
 			return
 		}
 
-		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
-		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
-			return
-		}
+		// count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
+		// if err != nil {
+		// 	log.Panic(err)
+		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
+		// 	return
+		// }
 
-		count, err = userCollection.CountDocuments(ctx, bson.M{"username": user.Username})
+		count, err := userCollection.CountDocuments(ctx, bson.M{"username": user.Username})
 		if err != nil {
 			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
@@ -90,7 +90,7 @@ func SignUp() gin.HandlerFunc {
 		user.Password = &password
 
 		if count > 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "this email already exists"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "This email is already registered"})
 			return
 		}
 
@@ -118,35 +118,50 @@ func SignUp() gin.HandlerFunc {
 // Login is the api used to tget a single user
 func Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		var user models.User
 		var foundUser models.User
-
+		
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
+		fmt.Println(user.Email)
+		fmt.Println(user.Password)
+
 		err := userCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "login or passowrd is incorrect"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "login or passowrd is incorrect"})
 			return
 		}
-
+		
 		passwordIsValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
 		defer cancel()
-		if passwordIsValid != true {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		if !passwordIsValid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": msg})
 			return
 		}
 
 		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.First_name, *foundUser.Last_name, foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
-
-		c.JSON(http.StatusOK, foundUser)
+		responseUser := models.ResponseUser{
+			ID:           foundUser.ID,
+			User_id:      foundUser.User_id,
+			Username:	  foundUser.Username,
+			Email:        foundUser.Email,
+			First_name:   foundUser.First_name,
+			Last_name:    foundUser.Last_name,
+			Created_at:   foundUser.Created_at,
+			Updated_at:   foundUser.Updated_at,
+			Token:        foundUser.Token,
+			Refresh_token: foundUser.Refresh_token,
+		}
+		c.JSON(http.StatusOK, responseUser)
 
 	}
 }
